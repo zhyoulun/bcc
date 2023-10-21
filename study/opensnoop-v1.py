@@ -34,15 +34,15 @@ examples = """examples:
     ./opensnoop                        # trace all open() syscalls
     ./opensnoop -T                     # include timestamps
     ./opensnoop -U                     # include UID
-    ./opensnoop -x                     # only show failed opens
-    ./opensnoop -p 181                 # only trace PID 181
-    ./opensnoop -t 123                 # only trace TID 123
-    ./opensnoop -u 1000                # only trace UID 1000
+    # ./opensnoop -x                     # only show failed opens
+    # ./opensnoop -p 181                 # only trace PID 181
+    # ./opensnoop -t 123                 # only trace TID 123
+    # ./opensnoop -u 1000                # only trace UID 1000
     ./opensnoop -d 10                  # trace for 10 seconds only
     ./opensnoop -n main                # only print process names containing "main"
-    ./opensnoop -e                     # show extended fields
-    ./opensnoop -f O_WRONLY -f O_RDWR  # only print calls for writing
-    ./opensnoop -F                     # show full path for an open file with relative path
+    # ./opensnoop -e                     # show extended fields
+    # ./opensnoop -f O_WRONLY -f O_RDWR  # only print calls for writing
+    # ./opensnoop -F                     # show full path for an open file with relative path
     ./opensnoop --cgroupmap mappath    # only trace cgroups in this BPF map
     ./opensnoop --mntnsmap mappath     # only trace mount namespaces in the map
 """
@@ -54,18 +54,18 @@ parser.add_argument("-T", "--timestamp", action="store_true",
     help="include timestamp on output")
 parser.add_argument("-U", "--print-uid", action="store_true",
     help="print UID column")
-parser.add_argument("-x", "--failed", action="store_true",
-    help="only show failed opens")
-parser.add_argument("-p", "--pid",
-    help="trace this PID only")
-parser.add_argument("-t", "--tid",
-    help="trace this TID only")
+# parser.add_argument("-x", "--failed", action="store_true",
+#     help="only show failed opens")
+# parser.add_argument("-p", "--pid",
+#     help="trace this PID only")
+# parser.add_argument("-t", "--tid",
+#     help="trace this TID only")
 parser.add_argument("--cgroupmap",
     help="trace cgroups in this BPF map only")
 parser.add_argument("--mntnsmap",
     help="trace mount namespaces in this BPF map only")
-parser.add_argument("-u", "--uid",
-    help="trace this UID only")
+# parser.add_argument("-u", "--uid",
+#     help="trace this UID only")
 parser.add_argument("-d", "--duration",
     help="total duration of trace in seconds")
 parser.add_argument("-n", "--name",
@@ -73,12 +73,12 @@ parser.add_argument("-n", "--name",
     help="only print process names containing this name")
 parser.add_argument("--ebpf", action="store_true",
     help=argparse.SUPPRESS)
-parser.add_argument("-e", "--extended_fields", action="store_true",
-    help="show extended fields")
-parser.add_argument("-f", "--flag_filter", action="append",
-    help="filter on flags argument (e.g., O_WRONLY)")
-parser.add_argument("-F", "--full-path", action="store_true",
-    help="show full path for an open file with relative path")
+# parser.add_argument("-e", "--extended_fields", action="store_true",
+#     help="show extended fields")
+# parser.add_argument("-f", "--flag_filter", action="append",
+#     help="filter on flags argument (e.g., O_WRONLY)")
+# parser.add_argument("-F", "--full-path", action="store_true",
+#     help="show full path for an open file with relative path")
 parser.add_argument("-b", "--buffer-pages", type=int, default=64,
     help="size of the perf ring buffer "
         "(must be a power of two number of pages and defaults to 64)")
@@ -86,17 +86,18 @@ args = parser.parse_args()
 debug = 0
 if args.duration:
     args.duration = timedelta(seconds=int(args.duration))
-flag_filter_mask = 0
-for flag in args.flag_filter or []:
-    if not flag.startswith('O_'):
-        exit("Bad flag: %s" % flag)
-    try:
-        flag_filter_mask |= getattr(os, flag)
-    except AttributeError:
-        exit("Bad flag: %s" % flag)
+# flag_filter_mask = 0
+# for flag in args.flag_filter or []:
+#     if not flag.startswith('O_'):
+#         exit("Bad flag: %s" % flag)
+#     try:
+#         flag_filter_mask |= getattr(os, flag)
+#     except AttributeError:
+#         exit("Bad flag: %s" % flag)
 
 # define BPF program
 bpf_text = """
+#define FULLPATH
 #include <uapi/linux/ptrace.h>
 #include <uapi/linux/limits.h>
 #include <linux/sched.h>
@@ -160,7 +161,8 @@ int trace_return(struct pt_regs *ctx)
     data.flags = valp->flags; // EXTENDED_STRUCT_MEMBER
     data.ret = PT_REGS_RC(ctx);
 
-    SUBMIT_DATA
+    // SUBMIT_DATA
+    events.perf_submit(ctx, &data, sizeof(data));
 
     infotmp.delete(&id);
 
@@ -192,9 +194,9 @@ bpf_text_kprobe_body = """
     u32 tid = id;       // Cast and get the lower part
     u32 uid = bpf_get_current_uid_gid();
 
-    PID_TID_FILTER
-    UID_FILTER
-    FLAGS_FILTER
+    // PID_TID_FILTER
+    // UID_FILTER
+    // FLAGS_FILTER
 
     if (container_should_be_filtered()) {
         return 0;
@@ -261,9 +263,9 @@ bpf_text_kfunc_body = """
     u32 tid = id;       // Cast and get the lower part
     u32 uid = bpf_get_current_uid_gid();
 
-    PID_TID_FILTER
-    UID_FILTER
-    FLAGS_FILTER
+    // PID_TID_FILTER
+    // UID_FILTER
+    // FLAGS_FILTER
     if (container_should_be_filtered()) {
         return 0;
     }
@@ -280,7 +282,8 @@ bpf_text_kfunc_body = """
     data.flags = flags; // EXTENDED_STRUCT_MEMBER
     data.ret   = ret;
 
-    SUBMIT_DATA
+    // SUBMIT_DATA
+    events.perf_submit(ctx, &data, sizeof(data));
 
     return 0;
 }
@@ -294,8 +297,8 @@ fnname_openat2 = b.get_syscall_prefix().decode() + 'openat2'
 if b.ksymname(fnname_openat2) == -1:
     fnname_openat2 = None
 
-if args.full_path:
-    bpf_text = "#define FULLPATH\n" + bpf_text
+# if args.full_path:
+#     bpf_text = "#define FULLPATH\n" + bpf_text
 
 is_support_kfunc = BPF.support_kfunc()
 if is_support_kfunc:
@@ -321,62 +324,62 @@ else:
         bpf_text += bpf_text_kprobe_header_openat2
         bpf_text += bpf_text_kprobe_body
 
-if args.tid:  # TID trumps PID
-    bpf_text = bpf_text.replace('PID_TID_FILTER',
-        'if (tid != %s) { return 0; }' % args.tid)
-elif args.pid:
-    bpf_text = bpf_text.replace('PID_TID_FILTER',
-        'if (pid != %s) { return 0; }' % args.pid)
-else:
-    bpf_text = bpf_text.replace('PID_TID_FILTER', '')
-if args.uid:
-    bpf_text = bpf_text.replace('UID_FILTER',
-        'if (uid != %s) { return 0; }' % args.uid)
-else:
-    bpf_text = bpf_text.replace('UID_FILTER', '')
+# if args.tid:  # TID trumps PID
+#     bpf_text = bpf_text.replace('PID_TID_FILTER',
+#         'if (tid != %s) { return 0; }' % args.tid)
+# elif args.pid:
+#     bpf_text = bpf_text.replace('PID_TID_FILTER',
+#         'if (pid != %s) { return 0; }' % args.pid)
+# else:
+#     bpf_text = bpf_text.replace('PID_TID_FILTER', '')
+# if args.uid:
+#     bpf_text = bpf_text.replace('UID_FILTER',
+#         'if (uid != %s) { return 0; }' % args.uid)
+# else:
+#     bpf_text = bpf_text.replace('UID_FILTER', '')
 bpf_text = filter_by_containers(args) + bpf_text
-if args.flag_filter:
-    bpf_text = bpf_text.replace('FLAGS_FILTER',
-        'if (!(flags & %d)) { return 0; }' % flag_filter_mask)
-else:
-    bpf_text = bpf_text.replace('FLAGS_FILTER', '')
-if not (args.extended_fields or args.flag_filter):
-    bpf_text = '\n'.join(x for x in bpf_text.split('\n')
-        if 'EXTENDED_STRUCT_MEMBER' not in x)
+# if args.flag_filter:
+#     bpf_text = bpf_text.replace('FLAGS_FILTER',
+#         'if (!(flags & %d)) { return 0; }' % flag_filter_mask)
+# else:
+#     bpf_text = bpf_text.replace('FLAGS_FILTER', '')
+# if not (args.extended_fields or args.flag_filter):
+#     bpf_text = '\n'.join(x for x in bpf_text.split('\n')
+#         if 'EXTENDED_STRUCT_MEMBER' not in x)
 
-if args.full_path:
-    bpf_text = bpf_text.replace('SUBMIT_DATA', """
-    data.type = EVENT_ENTRY;
-    events.perf_submit(ctx, &data, sizeof(data));
+# if args.full_path:
+#     bpf_text = bpf_text.replace('SUBMIT_DATA', """
+#     data.type = EVENT_ENTRY;
+#     events.perf_submit(ctx, &data, sizeof(data));
 
-    if (data.name[0] != '/') { // relative path
-        struct task_struct *task;
-        struct dentry *dentry;
-        int i;
+#     if (data.name[0] != '/') { // relative path
+#         struct task_struct *task;
+#         struct dentry *dentry;
+#         int i;
 
-        task = (struct task_struct *)bpf_get_current_task_btf();
-        dentry = task->fs->pwd.dentry;
+#         task = (struct task_struct *)bpf_get_current_task_btf();
+#         dentry = task->fs->pwd.dentry;
 
-        for (i = 1; i < MAX_ENTRIES; i++) {
-            bpf_probe_read_kernel(&data.name, sizeof(data.name), (void *)dentry->d_name.name);
-            data.type = EVENT_ENTRY;
-            events.perf_submit(ctx, &data, sizeof(data));
+#         for (i = 1; i < MAX_ENTRIES; i++) {
+#             bpf_probe_read_kernel(&data.name, sizeof(data.name), (void *)dentry->d_name.name);
+#             data.type = EVENT_ENTRY;
+#             events.perf_submit(ctx, &data, sizeof(data));
 
-            if (dentry == dentry->d_parent) { // root directory
-                break;
-            }
+#             if (dentry == dentry->d_parent) { // root directory
+#                 break;
+#             }
 
-            dentry = dentry->d_parent;
-        }
-    }
+#             dentry = dentry->d_parent;
+#         }
+#     }
 
-    data.type = EVENT_END;
-    events.perf_submit(ctx, &data, sizeof(data));
-    """)
-else:
-    bpf_text = bpf_text.replace('SUBMIT_DATA', """
-    events.perf_submit(ctx, &data, sizeof(data));
-    """)
+#     data.type = EVENT_END;
+#     events.perf_submit(ctx, &data, sizeof(data));
+#     """)
+# else:
+#     bpf_text = bpf_text.replace('SUBMIT_DATA', """
+#     events.perf_submit(ctx, &data, sizeof(data));
+#     """)
 
 if debug or args.ebpf:
     print(bpf_text)
@@ -403,10 +406,12 @@ if args.timestamp:
     print("%-14s" % ("TIME(s)"), end="")
 if args.print_uid:
     print("%-6s" % ("UID"), end="")
+# print("%-6s %-16s %4s %3s " %
+#       ("TID" if args.tid else "PID", "COMM", "FD", "ERR"), end="")
 print("%-6s %-16s %4s %3s " %
-      ("TID" if args.tid else "PID", "COMM", "FD", "ERR"), end="")
-if args.extended_fields:
-    print("%-9s" % ("FLAGS"), end="")
+      ("PID", "COMM", "FD", "ERR"), end="")
+# if args.extended_fields:
+#     print("%-9s" % ("FLAGS"), end="")
 print("PATH")
 
 class EventType(object):
@@ -420,7 +425,8 @@ def print_event(cpu, data, size):
     event = b["events"].event(data)
     global initial_ts
 
-    if not args.full_path or event.type == EventType.EVENT_END:
+    # if not args.full_path or event.type == EventType.EVENT_END:
+    if True:
         skip = False
 
         # split return value into FD and errno columns
@@ -434,8 +440,8 @@ def print_event(cpu, data, size):
         if not initial_ts:
             initial_ts = event.ts
 
-        if args.failed and (event.ret >= 0):
-            skip = True
+        # if args.failed and (event.ret >= 0):
+        #     skip = True
 
         if args.name and bytes(args.name) not in event.comm:
             skip = True
@@ -448,25 +454,28 @@ def print_event(cpu, data, size):
             if args.print_uid:
                 printb(b"%-6d" % event.uid, nl="")
 
+            # printb(b"%-6d %-16s %4d %3d " %
+            #        (event.id & 0xffffffff if args.tid else event.id >> 32,
+            #         event.comm, fd_s, err), nl="")
             printb(b"%-6d %-16s %4d %3d " %
-                   (event.id & 0xffffffff if args.tid else event.id >> 32,
-                    event.comm, fd_s, err), nl="")
+                   (event.id >> 32, event.comm, fd_s, err), nl="")
 
-            if args.extended_fields:
-                printb(b"%08o " % event.flags, nl="")
+            # if args.extended_fields:
+            #     printb(b"%08o " % event.flags, nl="")
 
-            if not args.full_path:
-                printb(b"%s" % event.name)
-            else:
-                paths = entries[event.id]
-                paths.reverse()
-                printb(b"%s" % os.path.join(*paths))
+            # if not args.full_path:
+            #     printb(b"%s" % event.name)
+            # else:
+            #     paths = entries[event.id]
+            #     paths.reverse()
+            #     printb(b"%s" % os.path.join(*paths))
+            printb(b"%s" % event.name)
 
-        if args.full_path:
-            try:
-                del(entries[event.id])
-            except Exception:
-                pass
+        # if args.full_path:
+        #     try:
+        #         del(entries[event.id])
+        #     except Exception:
+        #         pass
     elif event.type == EventType.EVENT_ENTRY:
         entries[event.id].append(event.name)
 
